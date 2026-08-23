@@ -18,11 +18,11 @@ if (usePostgres) {
     function toPgQuery(sql) { let i = 0; return sql.replace(/\?/g, () => `$${++i}`); }
 
     function wrap(queryable) {
-        return {
-            async get(sql, params = []) { const r = await queryable.query(toPgQuery(sql), params); return r.rows[0]; },
-            async all(sql, params = []) { const r = await queryable.query(toPgQuery(sql), params); return r.rows; },
+        const wrapped = {
+            async get(sql, params = []) { const r = await queryable.query(toPgQuery(sql), params ?? []); return r.rows[0]; },
+            async all(sql, params = []) { const r = await queryable.query(toPgQuery(sql), params ?? []); return r.rows; },
             async run(sql, params = []) {
-                const r = await queryable.query(toPgQuery(sql), params);
+                const r = await queryable.query(toPgQuery(sql), params ?? []);
                 return { lastInsertRowid: r.rows[0]?.id, changes: r.rowCount };
             },
             transaction(fn) {
@@ -36,12 +36,13 @@ if (usePostgres) {
             },
             prepare(sql) {
                 return {
-                    get: (p) => this.get(sql, p),
-                    all: (p) => this.all(sql, p),
-                    run: (p) => this.run(sql, p)
+                    get: (p) => wrapped.get(sql, p ?? []),
+                    all: (p) => wrapped.all(sql, p ?? []),
+                    run: (p) => wrapped.run(sql, p ?? [])
                 };
             }
         };
+        return wrapped;
     }
     db = wrap(pool);
 
