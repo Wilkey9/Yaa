@@ -35,11 +35,15 @@ if (usePostgres) {
                 };
             },
             prepare(sql) {
-                const toArray = (p) => p == null ? [] : Array.isArray(p) ? p : [p];
+                const toParams = (args) => {
+                    if (args.length === 0) return [];
+                    if (args.length === 1 && Array.isArray(args[0])) return args[0];
+                    return args;
+                };
                 return {
-                    get: (p) => wrapped.get(sql, toArray(p)),
-                    all: (p) => wrapped.all(sql, toArray(p)),
-                    run: (p) => wrapped.run(sql, toArray(p))
+                    get: (...args) => wrapped.get(sql, toParams(args)),
+                    all: (...args) => wrapped.all(sql, toParams(args)),
+                    run: (...args) => wrapped.run(sql, toParams(args))
                 };
             }
         };
