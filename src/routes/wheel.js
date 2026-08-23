@@ -37,23 +37,27 @@ router.get('/status', requireAuth, (req, res) => {
     res.json({ msUntilNextSpin: msUntilNextSpin(req.user) });
 });
 
-// Le tirage est décidé ici, jamais côté client : impossible de truquer le
-// résultat en modifiant le JavaScript du navigateur. Limité à 1x/jour pour
+// Le tirage est décidé ici, jamais côté client. Limité à 1x/jour pour
 // les non-admins (les admins tournent librement).
-router.post('/spin', requireAuth, (req, res) => {
-    const remaining = msUntilNextSpin(req.user);
-    if (remaining > 0) {
-        const hours = Math.ceil(remaining / (60 * 60 * 1000));
-        return res.status(429).json({ error: `Encore un peu de patience : prochain tour dans ${hours}h environ.`, msUntilNextSpin: remaining });
+router.post('/spin', requireAuth, async (req, res) => {
+    try {
+        const remaining = msUntilNextSpin(req.user);
+        if (remaining > 0) {
+            const hours = Math.ceil(remaining / (60 * 60 * 1000));
+            return res.status(429).json({ error: `Encore un peu de patience : prochain tour dans ${hours}h environ.`, msUntilNextSpin: remaining });
+        }
+
+        const won = pickWeighted();
+
+        await db.prepare('UPDATE users SET balance = balance + ?, last_wheel_spin_at = ? WHERE id = ?')
+            .run(won.value, Date.now(), req.user.id);
+        const newBalance = (await db.prepare('SELECT balance FROM users WHERE id = ?').get(req.user.id)).balance;
+
+        res.json({ value: won.value, label: won.label, newBalance });
+    } catch (err) {
+        console.error('Erreur POST /wheel/spin :', err);
+        res.status(500).json({ error: 'Erreur serveur.' });
     }
-
-    const won = pickWeighted();
-
-    db.prepare('UPDATE users SET balance = balance + ?, last_wheel_spin_at = ? WHERE id = ?')
-        .run(won.value, Date.now(), req.user.id);
-    const newBalance = db.prepare('SELECT balance FROM users WHERE id = ?').get(req.user.id).balance;
-
-    res.json({ value: won.value, label: won.label, newBalance });
 });
 
 module.exports = router;
