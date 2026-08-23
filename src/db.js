@@ -35,10 +35,11 @@ if (usePostgres) {
                 };
             },
             prepare(sql) {
+                const toArray = (p) => p == null ? [] : Array.isArray(p) ? p : [p];
                 return {
-                    get: (p) => wrapped.get(sql, p ?? []),
-                    all: (p) => wrapped.all(sql, p ?? []),
-                    run: (p) => wrapped.run(sql, p ?? [])
+                    get: (p) => wrapped.get(sql, toArray(p)),
+                    all: (p) => wrapped.all(sql, toArray(p)),
+                    run: (p) => wrapped.run(sql, toArray(p))
                 };
             }
         };
