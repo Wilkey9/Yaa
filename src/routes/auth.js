@@ -31,7 +31,7 @@ router.post('/register', async (req, res) => {
 
         const passwordHash = await bcrypt.hash(password, 12);
         const info = await db.prepare(
-            'INSERT INTO users (username, password_hash, is_admin, balance, created_at) VALUES (?, ?, 0, 1000, ?)'
+            'INSERT INTO users (username, password_hash, is_admin, balance, created_at) VALUES (?, ?, 0, 1000, ?) RETURNING id'
         ).run(cleanUsername, passwordHash, Date.now());
 
         const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
