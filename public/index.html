@@ -3506,54 +3506,8 @@
                     <strong>Options (une par ligne, séparées par des virgules)</strong><br>
                     Format: Nom,PrixOui,PrixNon,ImageURL (PrixNon et ImageURL optionnels) — ou uploadez un fichier via 📁, qui remplace l'ImageURL de la ligne.
                 </div>
-                <div class="form-group">
-                    <label>Option 1</label>
-                    <div class="image-input-row">
-                        <input type="text" id="adminOption1" placeholder="Ex: France,34,68,https://...">
-                        <button type="button" class="btn-upload-image" data-target="adminOption1" title="Choisir un fichier">📁</button>
-                        <input type="file" class="admin-option-file" data-target="adminOption1" accept="image/*" style="display:none;">
-                    </div>
-                    <div class="image-preview-row" id="adminOption1PreviewRow" style="display:none;">
-                        <img id="adminOption1Preview" class="option-avatar" alt="">
-                        <button type="button" class="btn-clear-image" data-target="adminOption1">✕ Retirer le fichier</button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Option 2</label>
-                    <div class="image-input-row">
-                        <input type="text" id="adminOption2" placeholder="Ex: Argentine,18,84">
-                        <button type="button" class="btn-upload-image" data-target="adminOption2" title="Choisir un fichier">📁</button>
-                        <input type="file" class="admin-option-file" data-target="adminOption2" accept="image/*" style="display:none;">
-                    </div>
-                    <div class="image-preview-row" id="adminOption2PreviewRow" style="display:none;">
-                        <img id="adminOption2Preview" class="option-avatar" alt="">
-                        <button type="button" class="btn-clear-image" data-target="adminOption2">✕ Retirer le fichier</button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Option 3</label>
-                    <div class="image-input-row">
-                        <input type="text" id="adminOption3" placeholder="Optionnel">
-                        <button type="button" class="btn-upload-image" data-target="adminOption3" title="Choisir un fichier">📁</button>
-                        <input type="file" class="admin-option-file" data-target="adminOption3" accept="image/*" style="display:none;">
-                    </div>
-                    <div class="image-preview-row" id="adminOption3PreviewRow" style="display:none;">
-                        <img id="adminOption3Preview" class="option-avatar" alt="">
-                        <button type="button" class="btn-clear-image" data-target="adminOption3">✕ Retirer le fichier</button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Option 4</label>
-                    <div class="image-input-row">
-                        <input type="text" id="adminOption4" placeholder="Optionnel">
-                        <button type="button" class="btn-upload-image" data-target="adminOption4" title="Choisir un fichier">📁</button>
-                        <input type="file" class="admin-option-file" data-target="adminOption4" accept="image/*" style="display:none;">
-                    </div>
-                    <div class="image-preview-row" id="adminOption4PreviewRow" style="display:none;">
-                        <img id="adminOption4Preview" class="option-avatar" alt="">
-                        <button type="button" class="btn-clear-image" data-target="adminOption4">✕ Retirer le fichier</button>
-                    </div>
-                </div>
+                <div id="adminOptionsList"></div>
+                <button type="button" id="adminAddOptionBtn" class="show-more-options" style="margin-bottom:16px;">➕ Ajouter une option</button>
             </div>
 
             <div id="adminBinaryNote" style="display:none;font-size:13px;color:var(--text-light);background:#f8f8f8;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
@@ -3956,7 +3910,6 @@
         let sectionVisibleCounts = { general: VISIBLE_INITIAL };
 
         async function loadMarkets() {
-            if (!currentUser) { marketsData = []; renderCards(); return; }
             try {
                 const data = await api('/markets');
                 marketsData = data.markets;
@@ -4134,15 +4087,10 @@
         }
 
         function renderCards() {
-            if (!currentUser) {
-                grid.innerHTML = `<p style="color:var(--text-light);padding:20px 0;">Connectez-vous pour voir les marchés.</p>`;
-                resultCount.textContent = '';
-                document.getElementById('categoryTabs').innerHTML = '';
-                return;
-            }
-
+            // Le groupe "Général" est visible même sans compte (voir loadMarkets/API) ;
+            // les groupes privés (myGroups) ne sont ajoutés que si connecté.
             const sections = [{ id: 'general', name: null, image: null }]
-                .concat(myGroups.map(g => ({ id: g.id, name: g.name, image: g.image })));
+                .concat(currentUser ? myGroups.map(g => ({ id: g.id, name: g.name, image: g.image })) : []);
 
             renderCategoryTabs(sections);
 
@@ -5021,7 +4969,6 @@
         // FileReader, envoyées telles quelles à l'API (aucun serveur de fichiers
         // séparé nécessaire pour un petit site).
         let adminMarketImageData = null;
-        const adminOptionImageData = { adminOption1: null, adminOption2: null, adminOption3: null, adminOption4: null };
 
         function readImageFile(file, onDone) {
             if (!file) return;
@@ -5030,16 +4977,83 @@
             reader.readAsDataURL(file);
         }
 
+        // ------------------------------------------------------------
+        // Options de marché multi-choix : lignes générées dynamiquement
+        // (bouton "+ Ajouter une option" -> plus de limite à 4).
+        // ------------------------------------------------------------
+        const adminOptionsList = document.getElementById('adminOptionsList');
+
+        function renumberOptionRows() {
+            adminOptionsList.querySelectorAll('.admin-option-row').forEach((row, i) => {
+                row.querySelector('.admin-option-label').textContent = `Option ${i + 1}`;
+            });
+        }
+
+        function createOptionRow(index) {
+            const row = document.createElement('div');
+            row.className = 'form-group admin-option-row';
+            row.innerHTML = `
+                <label class="admin-option-label">Option ${index}</label>
+                <div class="image-input-row">
+                    <input type="text" class="admin-option-text" placeholder="${index === 1 ? 'Ex: France,34,68,https://...' : (index === 2 ? 'Ex: Argentine,18,84' : 'Optionnel')}">
+                    <button type="button" class="btn-upload-image" title="Choisir un fichier">📁</button>
+                    <input type="file" class="admin-option-file" accept="image/*" style="display:none;">
+                    <button type="button" class="btn-remove-option" title="Supprimer cette option" style="background:none;border:none;color:var(--text-light);cursor:pointer;font-size:18px;padding:0 6px;">🗑️</button>
+                </div>
+                <div class="image-preview-row" style="display:none;">
+                    <img class="option-avatar" alt="">
+                    <button type="button" class="btn-clear-image">✕ Retirer le fichier</button>
+                </div>
+            `;
+
+            const uploadBtn = row.querySelector('.btn-upload-image');
+            const fileInput = row.querySelector('.admin-option-file');
+            const previewRow = row.querySelector('.image-preview-row');
+            const previewImg = row.querySelector('.option-avatar');
+            const clearBtn = row.querySelector('.btn-clear-image');
+            const removeBtn = row.querySelector('.btn-remove-option');
+
+            uploadBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', function() {
+                const file = this.files && this.files[0];
+                if (!file) return;
+                readImageFile(file, dataUrl => {
+                    row._imageData = dataUrl;
+                    previewImg.src = dataUrl;
+                    previewRow.style.display = 'flex';
+                });
+            });
+            clearBtn.addEventListener('click', () => {
+                row._imageData = null;
+                fileInput.value = '';
+                previewRow.style.display = 'none';
+            });
+            removeBtn.addEventListener('click', () => {
+                // On garde toujours au moins 2 lignes visibles (minimum requis).
+                if (adminOptionsList.querySelectorAll('.admin-option-row').length <= 2) return;
+                row.remove();
+                renumberOptionRows();
+            });
+
+            row._imageData = null;
+            return row;
+        }
+
+        function resetOptionRows(count = 2) {
+            adminOptionsList.innerHTML = '';
+            for (let i = 1; i <= count; i++) adminOptionsList.appendChild(createOptionRow(i));
+        }
+
+        document.getElementById('adminAddOptionBtn').addEventListener('click', () => {
+            const currentCount = adminOptionsList.querySelectorAll('.admin-option-row').length;
+            adminOptionsList.appendChild(createOptionRow(currentCount + 1));
+        });
+
         function resetImageUploads() {
             adminMarketImageData = null;
             document.getElementById('adminMarketImageFile').value = '';
             document.getElementById('adminMarketImagePreviewRow').style.display = 'none';
-            Object.keys(adminOptionImageData).forEach(id => {
-                adminOptionImageData[id] = null;
-                const fi = document.querySelector(`.admin-option-file[data-target="${id}"]`);
-                if (fi) fi.value = '';
-                document.getElementById(id + 'PreviewRow').style.display = 'none';
-            });
+            resetOptionRows(2);
         }
 
         document.getElementById('adminMarketImageUploadBtn').addEventListener('click', () => document.getElementById('adminMarketImageFile').click());
@@ -5058,33 +5072,6 @@
             document.getElementById('adminMarketImagePreviewRow').style.display = 'none';
         });
 
-        document.querySelectorAll('.btn-upload-image[data-target]').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelector(`.admin-option-file[data-target="${this.dataset.target}"]`).click();
-            });
-        });
-        document.querySelectorAll('.admin-option-file').forEach(input => {
-            input.addEventListener('change', function() {
-                const target = this.dataset.target;
-                const file = this.files && this.files[0];
-                if (!file) return;
-                readImageFile(file, dataUrl => {
-                    adminOptionImageData[target] = dataUrl;
-                    document.getElementById(target + 'Preview').src = dataUrl;
-                    document.getElementById(target + 'PreviewRow').style.display = 'flex';
-                });
-            });
-        });
-        document.querySelectorAll('.btn-clear-image[data-target]').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const target = this.dataset.target;
-                adminOptionImageData[target] = null;
-                const fi = document.querySelector(`.admin-option-file[data-target="${target}"]`);
-                if (fi) fi.value = '';
-                document.getElementById(target + 'PreviewRow').style.display = 'none';
-            });
-        });
-
         function populateMarketGroupSelect() {
             const select = document.getElementById('adminMarketGroup');
             select.innerHTML = '<option value="">Général (visible par tous)</option>' +
@@ -5093,8 +5080,8 @@
 
         document.getElementById('createMarketBtn').addEventListener('click', function() {
             if (!currentUser || !currentUser.isAdmin) return;
-            ['adminTitle', 'adminCategory', 'adminSubtitle', 'adminMarketImage', 'adminExpiry', 'adminYesPrice', 'adminNoPrice',
-             'adminOption1', 'adminOption2', 'adminOption3', 'adminOption4'].forEach(id => document.getElementById(id).value = '');
+            ['adminTitle', 'adminCategory', 'adminSubtitle', 'adminMarketImage', 'adminExpiry', 'adminYesPrice', 'adminNoPrice']
+                .forEach(id => document.getElementById(id).value = '');
             resetImageUploads();
             populateMarketGroupSelect();
             setAdminMarketType('binary');
@@ -5121,12 +5108,14 @@
                 if (isNaN(yesPrice) || yesPrice < 0 || yesPrice > 100) { alert('Veuillez saisir un prix "Oui" valide (0-100).'); return; }
                 body.yesPrice = yesPrice;
             } else {
-                const fieldIds = ['adminOption1', 'adminOption2', 'adminOption3', 'adminOption4'];
-                const lines = fieldIds.map(id => ({ fieldId: id, text: document.getElementById(id).value.trim() })).filter(o => o.text !== '');
+                const rows = Array.from(adminOptionsList.querySelectorAll('.admin-option-row'));
+                const lines = rows
+                    .map(row => ({ row, text: row.querySelector('.admin-option-text').value.trim() }))
+                    .filter(o => o.text !== '');
                 if (lines.length < 2) { alert('Veuillez saisir au moins 2 options.'); return; }
 
                 let parseError = null;
-                body.options = lines.map(({ fieldId, text }) => {
+                body.options = lines.map(({ row, text }) => {
                     const parts = text.split(',').map(s => s.trim());
                     const name = parts[0] || 'Option';
                     const yesPrice = parseFloat(parts[1]);
@@ -5135,7 +5124,7 @@
                     }
                     const noPriceRaw = parts[2] !== undefined && parts[2] !== '' ? parseFloat(parts[2]) : (100 - yesPrice);
                     const noPrice = isNaN(noPriceRaw) ? (100 - yesPrice) : noPriceRaw;
-                    const optionImage = adminOptionImageData[fieldId] || (parts[3] !== undefined ? parts[3].trim() : '');
+                    const optionImage = row._imageData || (parts[3] !== undefined ? parts[3].trim() : '');
                     return { name, yesPrice, noPrice, image: optionImage };
                 });
                 if (parseError) { alert(parseError); return; }

@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { requireAuth, requireAdmin } = require('../middleware');
+const { requireAuth, requireAdmin, optionalAuth } = require('../middleware');
 const {
     randomSeedLiquidity, calcOddsFromChance, getOptionChance,
     getOptionRealVolume, getPariMutuelMultiplier
@@ -48,10 +48,12 @@ function serializeMarket(market, options) {
 }
 
 // Marchés visibles par l'utilisateur connecté : Général + groupes rejoints.
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
     try {
-        const joinedGroupIds = (await db.prepare('SELECT group_id FROM group_members WHERE user_id = ?')
-            .all(req.user.id)).map(r => r.group_id);
+        const joinedGroupIds = req.user
+            ? (await db.prepare('SELECT group_id FROM group_members WHERE user_id = ?')
+                .all(req.user.id)).map(r => r.group_id)
+            : [];
 
         const placeholders = joinedGroupIds.map(() => '?').join(',');
         const query = joinedGroupIds.length > 0
@@ -71,7 +73,7 @@ router.get('/', requireAuth, async (req, res) => {
     }
 });
 
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
     try {
         const market = await db.prepare('SELECT * FROM markets WHERE id = ?').get(req.params.id);
         if (!market) return res.status(404).json({ error: 'Marché introuvable.' });
@@ -84,7 +86,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // Historique de prix (fictif + réel) pour le graphique.
-router.get('/:id/history', requireAuth, async (req, res) => {
+router.get('/:id/history', optionalAuth, async (req, res) => {
     try {
         const market = await db.prepare('SELECT * FROM markets WHERE id = ?').get(req.params.id);
         if (!market) return res.status(404).json({ error: 'Marché introuvable.' });
@@ -275,6 +277,14 @@ router.post('/:id/resolve', requireAdmin, async (req, res) => {
 
 router.delete('/:id', requireAdmin, async (req, res) => {
     try {
+        // Ordre important pour respecter les clés étrangères : price_history
+        // référence options, qui référence markets. On purge l'historique
+        // AVANT les options, sinon PostgreSQL refuse la suppression des
+        // options (contrainte de clé étrangère violée).
+        const optionIds = (await db.prepare('SELECT id FROM options WHERE market_id = ?').all(req.params.id)).map(o => o.id);
+        for (const optId of optionIds) {
+            await db.prepare('DELETE FROM price_history WHERE option_id = ?').run(optId);
+        }
         await db.prepare('DELETE FROM bets WHERE market_id = ?').run(req.params.id);
         await db.prepare('DELETE FROM options WHERE market_id = ?').run(req.params.id);
         await db.prepare('DELETE FROM markets WHERE id = ?').run(req.params.id);

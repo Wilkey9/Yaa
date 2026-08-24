@@ -16,6 +16,21 @@ async function requireAuth(req, res, next) {
     }
 }
 
+// Comme requireAuth, mais laisse passer les visiteurs non connectés :
+// req.user vaut simplement undefined dans ce cas. Utilisé pour les routes
+// publiques (ex : voir les marchés du groupe Général sans compte).
+async function optionalAuth(req, res, next) {
+    try {
+        if (req.session.userId) {
+            const user = await db.get('SELECT * FROM users WHERE id = ?', [req.session.userId]);
+            if (user) req.user = user;
+        }
+        next();
+    } catch (e) {
+        next(e);
+    }
+}
+
 // L'admin est un DROIT PAR COMPTE stocké en base (is_admin), jamais un simple
 // code visible côté client : c'est précisément ce qui empêche de "hacker"
 // le mode admin en modifiant le JavaScript du navigateur.
@@ -41,4 +56,4 @@ function requireOwner(req, res, next) {
     });
 }
 
-module.exports = { requireAuth, requireAdmin, requireOwner };
+module.exports = { requireAuth, requireAdmin, requireOwner, optionalAuth };
